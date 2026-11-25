@@ -33,6 +33,8 @@ export default function MediaLinkingView() {
   const [posts, setPosts] = useState<InstagramMediaItem[]>([]);
   const [activity, setActivity] = useState<ProcessedCommentItem[]>([]);
   const [products, setProducts] = useState<ProductItem[]>([]);
+  const [links, setLinks] = useState<PostProductLinkResponse[]>([]);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -50,16 +52,19 @@ export default function MediaLinkingView() {
   const loadData = async () => {
     try {
       setRefreshing(true);
-      const [postsRes, activityRes, productsRes] = await Promise.all([
-        api.getPosts(25).catch(() => []),
-        api.getCommentActivity(50).catch(() => []),
-        api.getProducts().catch(() => ({ items: [], total: 0, categories: [] })),
+      setError("");
+      const [postsRes, activityRes, productsRes, linksRes] = await Promise.all([
+        api.getPosts(25),
+        api.getCommentActivity(50),
+        api.getProducts(),
+        api.getPostLinks(),
       ]);
       setPosts(postsRes || []);
       setActivity(activityRes || []);
       setProducts(productsRes.items || []);
+      setLinks(linksRes);
     } catch (err) {
-      console.error("Failed to load post linking data:", err);
+      setError(err instanceof Error ? err.message : "Could not load posts. Please refresh to try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -71,19 +76,21 @@ export default function MediaLinkingView() {
   }, []);
 
   const openLinkModal = (post: InstagramMediaItem) => {
+    const saved = links.find(link => link.media_id === post.id && link.is_active);
     setSelectedPost(post);
     setSelectedProductIds(post.linked_product_ids || []);
     setAutoDmEnabled(post.auto_dm_enabled ?? true);
-    setPublicReplyEnabled(true);
-    setPublicReplyText("Sent you a DM with details! ✨");
-    setCustomReplyTemplate("");
+    setPublicReplyEnabled(saved?.public_reply_enabled ?? true);
+    setPublicReplyText(saved?.public_reply_text ?? "Sent you a DM with details! ✨");
+    setCustomReplyTemplate(saved?.custom_reply_template ?? "");
+    setProductSearch("");
   };
 
   const handleSaveLink = async () => {
-    if (!selectedPost) return;
+    if (!selectedPost || savingLink) return;
     setSavingLink(true);
     try {
-      await api.linkPost({
+      const saved = await api.linkPost({
         media_id: selectedPost.id,
         media_type: selectedPost.media_type,
         permalink: selectedPost.permalink,
@@ -95,6 +102,7 @@ export default function MediaLinkingView() {
         public_reply_enabled: publicReplyEnabled,
         public_reply_text: publicReplyText,
       });
+      setLinks(prev => [...prev.filter(link => link.media_id !== saved.media_id), saved]);
 
       // Update local state
       setPosts((prev) =>
@@ -138,7 +146,7 @@ export default function MediaLinkingView() {
       prod.category.toLowerCase().includes(productSearch.toLowerCase())
   );
 
-  const autoDMsSentToday = activity.filter((a) => a.private_reply_sent).length;
+  const recentAutoDMs = activity.filter((a) => a.private_reply_sent).length;
 
   return (
     <div className="space-y-6">
@@ -146,7 +154,7 @@ export default function MediaLinkingView() {
       <div className="rounded-2xl border border-[#23283a] bg-gradient-to-r from-[#121622] via-[#0f131c] to-[#141a27] p-6 shadow-xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
               <span className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
                 <Video className="w-5 h-5" />
               </span>
@@ -158,17 +166,17 @@ export default function MediaLinkingView() {
               </span>
             </div>
             <p className="text-sm text-slate-400 max-w-2xl">
-              Tag your Instagram Reels & Posts with catalogue SKUs. When followers comment asking for prices or details, JewelAI automatically delivers a private DM with verified pricing and photos within seconds.
+              Tag your Instagram Reels & Posts with catalogue SKUs. Eligible comments can receive catalogue-grounded private replies when global and post-level automation are enabled.
             </p>
           </div>
 
           <div className="flex items-center space-x-3">
             <div className="px-4 py-2 rounded-xl bg-[#171b28] border border-[#262c3f] text-right">
               <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
-                Daily Auto-DM Quota
+                Recent Private Replies
               </div>
               <div className="text-lg font-bold text-amber-300">
-                {autoDMsSentToday} <span className="text-xs text-slate-500 font-normal">/ 50 daily cap</span>
+                {recentAutoDMs} <span className="text-xs text-slate-500 font-normal">in loaded activity</span>
               </div>
             </div>
 
@@ -177,6 +185,7 @@ export default function MediaLinkingView() {
               disabled={refreshing}
               className="p-2.5 rounded-xl border border-[#262c3f] bg-[#161a26] hover:bg-[#1f2536] text-slate-300 transition-colors"
               title="Refresh Posts & Comments"
+              aria-label="Refresh Posts & Comments"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin text-amber-400" : ""}`} />
             </button>
@@ -209,6 +218,9 @@ export default function MediaLinkingView() {
           </button>
         </div>
       </div>
+
+      {error && <p role="alert" className="rounded-xl border border-rose-400/30 p-4 text-sm text-rose-200">{error} Use Refresh Posts & Comments to retry.</p>}
+      <p className="text-xs text-slate-400">Post switches do not override the global AI pause. Delivery is subject to provider permissions, policy and the server-configured daily cap.</p>
 
       {/* Main Content Area */}
       {activeSubTab === "posts" && (
@@ -311,7 +323,7 @@ export default function MediaLinkingView() {
                           {post.is_linked ? (
                             <span className="flex items-center text-emerald-400 space-x-1">
                               <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span className="text-[11px] font-medium">Auto-DM Active</span>
+                              <span className="text-[11px] font-medium">{post.auto_dm_enabled ? "Auto-DM configured" : "Auto-DM paused"}</span>
                             </span>
                           ) : (
                             <span className="text-slate-500 text-[11px]">Unlinked</span>
@@ -406,11 +418,11 @@ export default function MediaLinkingView() {
 
       {/* Linking Modal */}
       {selectedPost && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div role="dialog" aria-modal="true" aria-labelledby="post-link-title" className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#10141f] border border-[#252c40] rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl p-6 space-y-6">
             <div className="flex items-start justify-between border-b border-[#1f2538] pb-4">
               <div>
-                <h3 className="text-lg font-serif font-bold text-slate-100 flex items-center space-x-2">
+                <h3 id="post-link-title" className="text-lg font-serif font-bold text-slate-100 flex items-center space-x-2">
                   <Tag className="w-5 h-5 text-amber-400" />
                   <span>Link Jewellery Catalogue to Post</span>
                 </h3>
@@ -419,6 +431,8 @@ export default function MediaLinkingView() {
                 </p>
               </div>
               <button
+                aria-label="Close post link"
+                disabled={savingLink}
                 onClick={() => setSelectedPost(null)}
                 className="text-slate-500 hover:text-slate-300 text-sm font-semibold p-1"
               >
@@ -442,7 +456,7 @@ export default function MediaLinkingView() {
 
             {/* Product Selector */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <label className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
                   Select Catalogue Jewellery Items ({selectedProductIds.length} selected)
                 </label>
@@ -467,23 +481,14 @@ export default function MediaLinkingView() {
                   filteredCatalogue.map((prod) => {
                     const isSelected = selectedProductIds.includes(prod.id);
                     return (
-                      <div
+                      <label
                         key={prod.id}
-                        onClick={() => toggleProductSelection(prod.id)}
                         className={`p-3 flex items-center justify-between cursor-pointer transition-colors ${
                           isSelected ? "bg-amber-500/10" : "hover:bg-[#141926]"
                         }`}
                       >
                         <div className="flex items-center space-x-3">
-                          <div
-                            className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
-                              isSelected
-                                ? "bg-amber-400 border-amber-400 text-black"
-                                : "border-slate-600"
-                            }`}
-                          >
-                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                          </div>
+                          <input type="checkbox" aria-label={prod.name} checked={isSelected} onChange={() => toggleProductSelection(prod.id)} className="w-5 h-5 accent-amber-400 shrink-0" />
                           <div>
                             <div className="text-xs font-semibold text-slate-200">
                               {prod.name}
@@ -496,7 +501,7 @@ export default function MediaLinkingView() {
                         <span className="text-xs font-semibold text-amber-300">
                           ₹{prod.price.toLocaleString("en-IN")}
                         </span>
-                      </div>
+                      </label>
                     );
                   })
                 )}
@@ -510,6 +515,7 @@ export default function MediaLinkingView() {
                   <span className="text-xs font-semibold text-slate-200">Auto-DM on Comment</span>
                   <input
                     type="checkbox"
+                    aria-label="Auto-DM on Comment"
                     checked={autoDmEnabled}
                     onChange={(e) => setAutoDmEnabled(e.target.checked)}
                     className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
@@ -525,6 +531,7 @@ export default function MediaLinkingView() {
                   <span className="text-xs font-semibold text-slate-200">Public Reply</span>
                   <input
                     type="checkbox"
+                    aria-label="Public Reply"
                     checked={publicReplyEnabled}
                     onChange={(e) => setPublicReplyEnabled(e.target.checked)}
                     className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
@@ -532,6 +539,7 @@ export default function MediaLinkingView() {
                 </div>
                 <input
                   type="text"
+                  aria-label="Public reply text"
                   value={publicReplyText}
                   onChange={(e) => setPublicReplyText(e.target.value)}
                   placeholder="e.g. Sent you a DM with details! ✨"
@@ -547,6 +555,7 @@ export default function MediaLinkingView() {
               </label>
               <textarea
                 rows={3}
+                aria-label="Custom Reply Template (Optional)"
                 value={customReplyTemplate}
                 onChange={(e) => setCustomReplyTemplate(e.target.value)}
                 placeholder="Leave blank for automatic luxury AI formatting. Tags supported: {product_name}, {price}, {purity}, {sku}"
@@ -558,6 +567,7 @@ export default function MediaLinkingView() {
             <div className="flex items-center justify-end space-x-3 pt-3 border-t border-[#1f2538]">
               <button
                 onClick={() => setSelectedPost(null)}
+                disabled={savingLink}
                 className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
               >
                 Cancel
@@ -575,7 +585,7 @@ export default function MediaLinkingView() {
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Save Link & Enable Auto-DM</span>
+                    <span>Save Link</span>
                   </>
                 )}
               </button>

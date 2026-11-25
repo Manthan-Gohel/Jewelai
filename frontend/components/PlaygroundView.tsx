@@ -24,6 +24,7 @@ export default function PlaygroundView() {
   const [imageUrl, setImageUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AITestResult | null>(null);
+  const [error, setError] = useState("");
 
   const sampleScenarios = [
     {
@@ -59,13 +60,15 @@ export default function PlaygroundView() {
   ];
 
   const handleRunSimulation = async (textToRun = message, imgToRun = imageUrl) => {
-    if (!textToRun.trim() && !imgToRun) return;
+    if (loading || (!textToRun.trim() && !imgToRun)) return;
     try {
       setLoading(true);
+      setError("");
+      setResult(null);
       const res = await api.testAI(textToRun, imgToRun || undefined);
       setResult(res);
     } catch (err: any) {
-      alert("Simulation failed: " + err.message);
+      setError("Simulation failed: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -91,6 +94,7 @@ export default function PlaygroundView() {
         {sampleScenarios.map((s, idx) => (
           <button
             key={idx}
+            disabled={loading}
             onClick={() => {
               setMessage(s.text);
               setImageUrl(s.img);
@@ -116,6 +120,7 @@ export default function PlaygroundView() {
                 Customer Message (Instagram DM)
               </label>
               <textarea
+                aria-label="Customer Message (Instagram DM)"
                 rows={4}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
@@ -132,6 +137,7 @@ export default function PlaygroundView() {
                 <ImageIcon className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
                 <input
                   type="url"
+                  aria-label="Customer Reference Photo URL (Optional)"
                   placeholder="https://images.unsplash.com/..."
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
@@ -148,7 +154,7 @@ export default function PlaygroundView() {
 
           <button
             onClick={() => handleRunSimulation()}
-            disabled={loading}
+            disabled={loading || (!message.trim() && !imageUrl)}
             className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center space-x-2 shadow-lg shadow-amber-500/20 transition-all disabled:opacity-50"
           >
             <Sparkles className="w-4 h-4" />
@@ -158,6 +164,7 @@ export default function PlaygroundView() {
 
         {/* Right Column: Grounded Result Breakdown (7 cols) */}
         <div className="lg:col-span-7 rounded-2xl bg-[#0f1118] border border-[#1e2333] p-5 space-y-4">
+          {error && <p role="alert" className="text-sm text-rose-200">{error} Try the simulation again.</p>}
           {result ? (
             <div className="space-y-4">
               {/* Intent & Entity Pill Bar */}
@@ -205,7 +212,7 @@ export default function PlaygroundView() {
                   </span>
                   <div className="flex items-center space-x-1 text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
                     <CheckCircle2 className="w-3 h-3" />
-                    <span>Fact Checked</span>
+                    <span>{result.fact_validation_passed ? "Fact Checked" : "Fallback Applied"}</span>
                   </div>
                 </div>
 
@@ -225,7 +232,7 @@ export default function PlaygroundView() {
                 <div className="text-[11px] text-slate-400 leading-relaxed">
                   {result.fact_validation_passed ? (
                     <p className="text-emerald-400">
-                      ✓ Zero ungrounded claims. All quoted prices, metal purities, and stock availability match verified database records.
+                      ✓ Automated validation passed against the available catalogue context. Review the reply before enabling live automation.
                     </p>
                   ) : (
                     <p className="text-amber-400">

@@ -15,7 +15,7 @@ import { formatDate } from "@/lib/utils";
 
 interface SettingsViewProps {
   settings: BusinessSettings | null;
-  onUpdateSettings: (data: Partial<BusinessSettings>) => void;
+  onUpdateSettings: (data: Partial<BusinessSettings>) => Promise<void>;
 }
 
 export default function SettingsView({ settings, onUpdateSettings }: SettingsViewProps) {
@@ -25,13 +25,15 @@ export default function SettingsView({ settings, onUpdateSettings }: SettingsVie
   const [tagline, setTagline] = useState(settings?.tagline || "");
   const [contactPhone, setContactPhone] = useState(settings?.contact_phone || "");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const loadLogs = async () => {
     try {
       const data = await api.getActivityLogs();
       setLogs(data);
+      setError("");
     } catch (err) {
-      console.error("Failed to load logs:", err);
+      setError(err instanceof Error ? err.message : "Could not load audit logs.");
     }
   };
 
@@ -41,6 +43,7 @@ export default function SettingsView({ settings, onUpdateSettings }: SettingsVie
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     setSaving(true);
     try {
       await onUpdateSettings({
@@ -69,6 +72,7 @@ export default function SettingsView({ settings, onUpdateSettings }: SettingsVie
         </p>
       </div>
 
+      {error && <p role="alert" className="text-sm text-rose-200">{error} Use Refresh audit logs to retry.</p>}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Brand Configuration (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
@@ -85,6 +89,7 @@ export default function SettingsView({ settings, onUpdateSettings }: SettingsVie
                 <label className="text-[11px] text-slate-400 block mb-1">Business Name</label>
                 <input
                   type="text"
+                  aria-label="Business Name"
                   value={businessName}
                   onChange={(e) => setBusinessName(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-xl bg-[#141824] border border-[#23283a] text-xs text-white"
@@ -95,6 +100,7 @@ export default function SettingsView({ settings, onUpdateSettings }: SettingsVie
                 <label className="text-[11px] text-slate-400 block mb-1">Tagline</label>
                 <input
                   type="text"
+                  aria-label="Tagline"
                   value={tagline}
                   onChange={(e) => setTagline(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-xl bg-[#141824] border border-[#23283a] text-xs text-white"
@@ -104,6 +110,7 @@ export default function SettingsView({ settings, onUpdateSettings }: SettingsVie
               <div>
                 <label className="text-[11px] text-slate-400 block mb-1">AI Conversational Tone</label>
                 <select
+                  aria-label="AI Conversational Tone"
                   value={tone}
                   onChange={(e) => setTone(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-xl bg-[#141824] border border-[#23283a] text-xs text-white"
@@ -119,6 +126,7 @@ export default function SettingsView({ settings, onUpdateSettings }: SettingsVie
                 <label className="text-[11px] text-slate-400 block mb-1">Customer Care Phone</label>
                 <input
                   type="text"
+                  aria-label="Customer Care Phone"
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-xl bg-[#141824] border border-[#23283a] text-xs text-white"
@@ -148,7 +156,7 @@ export default function SettingsView({ settings, onUpdateSettings }: SettingsVie
                   Automation & Fact Validation Audit Logs
                 </h3>
               </div>
-              <span className="text-[10px] text-slate-500">Live stream</span>
+              <button onClick={loadLogs} className="text-[10px] text-amber-300 underline">Refresh audit logs</button>
             </div>
 
             <div className="overflow-x-auto">

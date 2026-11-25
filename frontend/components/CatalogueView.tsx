@@ -25,6 +25,8 @@ export default function CatalogueView() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   
   // CSV Import State
   const [isCsvOpen, setIsCsvOpen] = useState(false);
@@ -52,6 +54,7 @@ export default function CatalogueView() {
   const loadProducts = async () => {
     try {
       setLoading(true);
+      setError("");
       const res = await api.getProducts({
         category: selectedCategory,
         search: search.trim() || undefined,
@@ -59,7 +62,7 @@ export default function CatalogueView() {
       setProducts(res.items);
       setCategories(["All", ...res.categories]);
     } catch (err) {
-      console.error("Failed to load products:", err);
+      setError(err instanceof Error ? err.message : "Could not load the catalogue. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -76,11 +79,13 @@ export default function CatalogueView() {
 
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     if (!formData.sku || !formData.name || !formData.price) {
       alert("Please fill in SKU, Name, and Price.");
       return;
     }
     try {
+      setSaving(true);
       await api.createProduct({
         sku: formData.sku,
         name: formData.name,
@@ -88,7 +93,7 @@ export default function CatalogueView() {
         price: parseFloat(formData.price),
         gold_purity: formData.gold_purity,
         gross_weight: formData.gross_weight ? parseFloat(formData.gross_weight) : undefined,
-        stock: parseInt(formData.stock) || 1,
+        stock: Number(formData.stock),
         description: formData.description,
         image_urls: formData.image_url ? [formData.image_url] : [],
       });
@@ -107,6 +112,8 @@ export default function CatalogueView() {
       loadProducts();
     } catch (err: any) {
       alert("Error adding product: " + err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -204,6 +211,9 @@ export default function CatalogueView() {
           </button>
         </div>
       </div>
+
+      {error && <p role="alert" className="rounded-xl border border-rose-400/30 p-4 text-sm text-rose-200">{error}<button onClick={loadProducts} className="ml-3 underline">Retry catalogue</button></p>}
+      {loading && <p role="status" className="text-xs text-slate-400">Loading catalogue…</p>}
 
       {/* Filter and Search Bar */}
       <div className="p-4 rounded-xl bg-[#0f1118] border border-[#1e2333] flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -313,6 +323,7 @@ export default function CatalogueView() {
                   </span>
                   <button
                     onClick={() => handleDelete(item.id)}
+                    aria-label={`Delete ${item.name}`}
                     className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -326,15 +337,16 @@ export default function CatalogueView() {
 
       {/* Add Product Modal */}
       {isAddOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-[#11141e] border border-[#22283a] p-6 space-y-4">
-            <h3 className="text-base font-bold text-white font-serif">Add New Jewellery Item</h3>
+        <div role="dialog" aria-modal="true" aria-labelledby="add-product-title" className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-[#11141e] border border-[#22283a] p-6 space-y-4">
+            <h3 id="add-product-title" className="text-base font-bold text-white font-serif">Add New Jewellery Item</h3>
             <form onSubmit={handleCreateProduct} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] text-slate-400 block mb-1">SKU *</label>
                   <input
                     type="text"
+                    aria-label="SKU"
                     required
                     placeholder="e.g. JW-RG-205"
                     value={formData.sku}
@@ -345,6 +357,7 @@ export default function CatalogueView() {
                 <div>
                   <label className="text-[11px] text-slate-400 block mb-1">Category *</label>
                   <select
+                    aria-label="Category"
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="w-full px-3 py-1.5 rounded-xl bg-[#161a26] border border-[#242a3a] text-xs text-white"
@@ -360,6 +373,7 @@ export default function CatalogueView() {
                 <label className="text-[11px] text-slate-400 block mb-1">Product Name *</label>
                 <input
                   type="text"
+                  aria-label="Product Name"
                   required
                   placeholder="e.g. 22K Royal Floral Gold Ring"
                   value={formData.name}
@@ -373,6 +387,9 @@ export default function CatalogueView() {
                   <label className="text-[11px] text-slate-400 block mb-1">Price (₹ INR) *</label>
                   <input
                     type="number"
+                    aria-label="Price (₹ INR)"
+                    min="0"
+                    step="0.01"
                     required
                     placeholder="25000"
                     value={formData.price}
@@ -383,6 +400,7 @@ export default function CatalogueView() {
                 <div>
                   <label className="text-[11px] text-slate-400 block mb-1">Purity</label>
                   <select
+                    aria-label="Purity"
                     value={formData.gold_purity}
                     onChange={(e) => setFormData({ ...formData, gold_purity: e.target.value })}
                     className="w-full px-3 py-1.5 rounded-xl bg-[#161a26] border border-[#242a3a] text-xs text-white"
@@ -396,6 +414,8 @@ export default function CatalogueView() {
                   <label className="text-[11px] text-slate-400 block mb-1">Weight (g)</label>
                   <input
                     type="number"
+                    aria-label="Weight (g)"
+                    min="0"
                     step="0.01"
                     placeholder="4.2"
                     value={formData.gross_weight}
@@ -403,6 +423,11 @@ export default function CatalogueView() {
                     className="w-full px-3 py-1.5 rounded-xl bg-[#161a26] border border-[#242a3a] text-xs text-white"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="product-stock" className="text-[11px] text-slate-400 block mb-1">Available Stock</label>
+                <input id="product-stock" type="number" min="0" step="1" required value={formData.stock} onChange={e => setFormData({ ...formData, stock: e.target.value })} className="w-full px-3 py-1.5 rounded-xl bg-[#161a26] border border-[#242a3a] text-xs text-white" />
               </div>
 
               <div>
@@ -430,6 +455,7 @@ export default function CatalogueView() {
               <div className="flex justify-end space-x-2 pt-3">
                 <button
                   type="button"
+                  disabled={saving}
                   onClick={() => setIsAddOpen(false)}
                   className="px-3.5 py-1.5 rounded-xl bg-[#1c2130] text-xs text-slate-300 font-semibold"
                 >
@@ -437,9 +463,10 @@ export default function CatalogueView() {
                 </button>
                 <button
                   type="submit"
+                  disabled={saving}
                   className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-xs font-bold"
                 >
-                  Save Product
+                  {saving ? "Saving..." : "Save Product"}
                 </button>
               </div>
             </form>
@@ -480,12 +507,13 @@ export default function CatalogueView() {
                 <div className="p-6 rounded-2xl bg-[#141824] border-2 border-dashed border-[#282f44] hover:border-amber-500/40 text-center space-y-2 cursor-pointer transition-colors">
                   <Upload className="w-8 h-8 text-amber-400 mx-auto opacity-80" />
                   <div className="text-xs text-slate-300 font-medium">
-                    {csvFile ? csvFile.name : "Select or drag & drop jewellery CSV file"}
+                    {csvFile ? csvFile.name : "Select a jewellery CSV file"}
                   </div>
                   <input
                     type="file"
+                    aria-label="Jewellery CSV file"
                     accept=".csv"
-                    required
+                    required={!csvFile}
                     onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
                     className="w-full text-xs text-slate-400 file:mr-4 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-500/10 file:text-amber-300 hover:file:bg-amber-500/20 cursor-pointer"
                   />

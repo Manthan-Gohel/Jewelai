@@ -28,6 +28,7 @@ export default function InboxView() {
   const [replyText, setReplyText] = useState("");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
 
   // Load conversations
   const loadConversations = async () => {
@@ -35,11 +36,10 @@ export default function InboxView() {
       setLoading(true);
       const data = await api.getConversations();
       setConversations(data);
-      if (data.length > 0 && !selectedId) {
-        setSelectedId(data[0].id);
-      }
+      setSelectedId(current => current && data.some(item => item.id === current) ? current : data[0]?.id ?? null);
+      setError("");
     } catch (err) {
-      console.error("Failed to load conversations:", err);
+      setError(err instanceof Error ? err.message : "Could not load conversations. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -53,16 +53,20 @@ export default function InboxView() {
 
   // Load active conversation details when selection changes
   useEffect(() => {
+    setActiveConversation(null);
     if (!selectedId) return;
+    let cancelled = false;
     const fetchDetail = async () => {
       try {
         const detail = await api.getConversation(selectedId);
-        setActiveConversation(detail);
+        if (!cancelled) setActiveConversation(detail);
       } catch (err) {
-        console.error("Failed to load conversation detail:", err);
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not refresh the conversation.");
       }
     };
     fetchDetail();
+    const interval = setInterval(fetchDetail, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [selectedId]);
 
   // Handle staff manual reply
@@ -74,7 +78,7 @@ export default function InboxView() {
       setReplyText("");
       // Refresh detail
       const detail = await api.getConversation(selectedId);
-      setActiveConversation(detail);
+      setActiveConversation(current => current?.id === detail.id ? detail : current);
       loadConversations();
     } catch (err) {
       alert("Failed to send reply: " + err);
@@ -93,7 +97,7 @@ export default function InboxView() {
         !newTakeover,
         newTakeover
       );
-      setActiveConversation(updated);
+      setActiveConversation(current => current?.id === updated.id ? { ...current, ...updated } : current);
       loadConversations();
     } catch (err) {
       alert("Failed to update status: " + err);
@@ -101,8 +105,8 @@ export default function InboxView() {
   };
 
   const filteredConversations = conversations.filter((c) => {
-    if (filter === "pending_human" && !c.human_takeover) return false;
-    if (filter === "active" && c.human_takeover) return false;
+    if (filter === "pending_human" && !c.human_takeover && c.status !== "pending_human") return false;
+    if (filter === "active" && (c.human_takeover || !c.ai_enabled || c.status !== "active")) return false;
     if (search) {
       const q = search.toLowerCase();
       const matchName = c.customer.full_name?.toLowerCase().includes(q);
@@ -111,13 +115,18 @@ export default function InboxView() {
     }
     return true;
   });
+  const timestamp = activeConversation?.last_customer_message_at;
+  const lastCustomerTime = timestamp ? Date.parse(timestamp + (/(Z|[+-]\d{2}:\d{2})$/i.test(timestamp) ? "" : "Z")) : NaN;
+  const hoursSinceCustomer = (Date.now() - lastCustomerTime) / 3600000;
+  const messagingWindowOpen = hoursSinceCustomer >= 0 && hoursSinceCustomer < 24;
 
   return (
-    <div className="h-[calc(100vh-140px)] rounded-2xl bg-[#0f1118] border border-[#1e2333] overflow-hidden flex flex-col md:flex-row">
+    <div className="min-h-[36rem] md:h-[calc(100vh-140px)] rounded-2xl bg-[#0f1118] border border-[#1e2333] overflow-hidden flex flex-col md:flex-row">
       {/* Left Pane: Conversation Threads */}
       <div className="w-full md:w-80 lg:w-96 border-b md:border-b-0 md:border-r border-[#1e2333] flex flex-col bg-[#0c0e15]">
         {/* Search & Filter Header */}
         <div className="p-3 border-b border-[#1e2333] space-y-2">
+          {error && <p role="alert" className="text-xs text-rose-200">{error}<button onClick={loadConversations} className="ml-2 underline">Retry inbox</button></p>}
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
             <input
@@ -160,10 +169,13 @@ export default function InboxView() {
             filteredConversations.map((conv) => {
               const isSelected = selectedId === conv.id;
               return (
-                <div
+                <button
                   key={conv.id}
+                  type="button"
+                  aria-label={`Open conversation with ${conv.customer.username || conv.customer.instagram_user_id}`}
+                  aria-pressed={isSelected}
                   onClick={() => setSelectedId(conv.id)}
-                  className={`p-3 cursor-pointer transition-colors ${
+                  className={`block w-full text-left p-3 cursor-pointer transition-colors ${
                     isSelected
                       ? "bg-[#181d2a] border-l-2 border-amber-400"
                       : "hover:bg-[#121622]"
@@ -179,9 +191,9 @@ export default function InboxView() {
                           <span className="text-xs font-semibold text-slate-200 truncate">
                             @{conv.customer.username || `user_${conv.customer.instagram_user_id.slice(-4)}`}
                           </span>
-                          {conv.human_takeover ? (
+                          {conv.human_takeover || conv.status === "pending_human" || !conv.ai_enabled ? (
                             <span className="px-1.5 py-0.2 rounded text-[9px] bg-purple-500/15 text-purple-300 border border-purple-500/30 font-medium">
-                              Staff Takeover
+                              {conv.human_takeover ? "Staff Takeover" : "Needs staff"}
                             </span>
                           ) : (
                             <span className="px-1.5 py-0.2 rounded text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/30 font-medium flex items-center space-x-1">
@@ -199,7 +211,7 @@ export default function InboxView() {
                       {formatTime(conv.last_message_at)}
                     </span>
                   </div>
-                </div>
+                </button>
               );
             })
           )}
@@ -208,9 +220,9 @@ export default function InboxView() {
 
       {/* Right Pane: Active Thread */}
       {activeConversation ? (
-        <div className="flex-1 flex flex-col bg-[#0f1118]">
+        <div className="min-w-0 min-h-[28rem] flex-1 flex flex-col bg-[#0f1118]">
           {/* Thread Header */}
-          <div className="p-3.5 border-b border-[#1e2333] flex items-center justify-between bg-[#11141e]">
+          <div className="p-3.5 border-b border-[#1e2333] flex flex-wrap gap-3 items-center justify-between bg-[#11141e]">
             <div className="flex items-center space-x-3">
               <div className="w-9 h-9 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center font-bold text-sm text-amber-300">
                 {activeConversation.customer.username?.[0]?.toUpperCase() || "C"}
@@ -225,9 +237,9 @@ export default function InboxView() {
                   </span>
                 </div>
                 <div className="flex items-center space-x-3 text-[11px] text-slate-400 mt-0.5">
-                  <span className="flex items-center space-x-1 text-emerald-400">
+                  <span className={`flex items-center space-x-1 ${messagingWindowOpen ? "text-emerald-400" : "text-amber-400"}`}>
                     <Clock className="w-3 h-3" />
-                    <span>24h Messaging Window Active</span>
+                    <span>{messagingWindowOpen ? "24h Messaging Window Active" : "Messaging window expired"}</span>
                   </span>
                   <span>•</span>
                   <span>Lang: {activeConversation.customer.preferred_language.toUpperCase()}</span>
@@ -341,7 +353,7 @@ export default function InboxView() {
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSendReply()}
-                className="flex-1 px-3.5 py-2.5 rounded-xl bg-[#161a26] border border-[#242a3a] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                className="min-w-0 flex-1 px-3.5 py-2.5 rounded-xl bg-[#161a26] border border-[#242a3a] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
               />
               <button
                 onClick={handleSendReply}

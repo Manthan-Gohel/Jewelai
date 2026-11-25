@@ -15,7 +15,7 @@ import { BusinessSettings, api } from "@/lib/api";
 
 interface KnowledgeViewProps {
   settings: BusinessSettings | null;
-  onUpdateSettings: (data: Partial<BusinessSettings>) => void;
+  onUpdateSettings: (data: Partial<BusinessSettings>) => Promise<void>;
 }
 
 export default function KnowledgeView({ settings, onUpdateSettings }: KnowledgeViewProps) {
@@ -31,13 +31,16 @@ export default function KnowledgeView({ settings, onUpdateSettings }: KnowledgeV
   const [timings, setTimings] = useState(settings?.store_timings || "");
   const [address, setAddress] = useState(settings?.store_address || "");
   const [savingRates, setSavingRates] = useState(false);
+  const [savingFaq, setSavingFaq] = useState(false);
+  const [error, setError] = useState("");
 
   const loadFaqs = async () => {
     try {
       const data = await api.getKnowledge();
       setFaqs(data);
+      setError("");
     } catch (err) {
-      console.error("Failed to load FAQs:", err);
+      setError(err instanceof Error ? err.message : "Could not load knowledge documents.");
     }
   };
 
@@ -47,6 +50,7 @@ export default function KnowledgeView({ settings, onUpdateSettings }: KnowledgeV
 
   const handleSaveRates = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingRates) return;
     setSavingRates(true);
     try {
       await onUpdateSettings({
@@ -66,14 +70,17 @@ export default function KnowledgeView({ settings, onUpdateSettings }: KnowledgeV
 
   const handleCreateFaq = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newFaq.title || !newFaq.content) return;
+    if (savingFaq || !newFaq.title.trim() || !newFaq.content.trim()) return;
     try {
+      setSavingFaq(true);
       await api.createKnowledge(newFaq);
       setIsAddFaqOpen(false);
       setNewFaq({ title: "", content: "", category: "faq" });
       loadFaqs();
     } catch (err) {
       alert("Failed to create FAQ: " + err);
+    } finally {
+      setSavingFaq(false);
     }
   };
 
@@ -89,6 +96,7 @@ export default function KnowledgeView({ settings, onUpdateSettings }: KnowledgeV
         </p>
       </div>
 
+      {error && <p role="alert" className="text-sm text-rose-200">{error}<button onClick={loadFaqs} className="ml-2 underline">Retry knowledge</button></p>}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Gold Rates & Store Hours (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
@@ -145,6 +153,7 @@ export default function KnowledgeView({ settings, onUpdateSettings }: KnowledgeV
                 <label className="text-[11px] text-slate-400 block mb-1">Store Timings</label>
                 <input
                   type="text"
+                  aria-label="Store Timings"
                   value={timings}
                   onChange={(e) => setTimings(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-xl bg-[#141824] border border-[#23283a] text-xs text-white"
@@ -154,6 +163,7 @@ export default function KnowledgeView({ settings, onUpdateSettings }: KnowledgeV
               <div>
                 <label className="text-[11px] text-slate-400 block mb-1">Store Address</label>
                 <textarea
+                  aria-label="Store Address"
                   rows={2}
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
@@ -219,13 +229,14 @@ export default function KnowledgeView({ settings, onUpdateSettings }: KnowledgeV
 
       {/* Add FAQ Modal */}
       {isAddFaqOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl bg-[#11141e] border border-[#22283a] p-6 space-y-4">
-            <h3 className="text-base font-bold text-white font-serif">Add Knowledge Document</h3>
+        <div role="dialog" aria-modal="true" aria-labelledby="knowledge-title" className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-[#11141e] border border-[#22283a] p-6 space-y-4">
+            <h3 id="knowledge-title" className="text-base font-bold text-white font-serif">Add Knowledge Document</h3>
             <form onSubmit={handleCreateFaq} className="space-y-3">
               <div>
                 <label className="text-[11px] text-slate-400 block mb-1">Category</label>
                 <select
+                  aria-label="Category"
                   value={newFaq.category}
                   onChange={(e) => setNewFaq({ ...newFaq, category: e.target.value })}
                   className="w-full px-3 py-1.5 rounded-xl bg-[#161a26] border border-[#242a3a] text-xs text-white"
@@ -241,6 +252,7 @@ export default function KnowledgeView({ settings, onUpdateSettings }: KnowledgeV
                 <label className="text-[11px] text-slate-400 block mb-1">Title</label>
                 <input
                   type="text"
+                  aria-label="Title"
                   required
                   placeholder="e.g. Diamond Certification & Warranty"
                   value={newFaq.title}
@@ -253,6 +265,7 @@ export default function KnowledgeView({ settings, onUpdateSettings }: KnowledgeV
                 <label className="text-[11px] text-slate-400 block mb-1">Content</label>
                 <textarea
                   rows={3}
+                  aria-label="Content"
                   required
                   placeholder="Detailed factual policy explanation..."
                   value={newFaq.content}
@@ -264,6 +277,7 @@ export default function KnowledgeView({ settings, onUpdateSettings }: KnowledgeV
               <div className="flex justify-end space-x-2 pt-2">
                 <button
                   type="button"
+                  disabled={savingFaq}
                   onClick={() => setIsAddFaqOpen(false)}
                   className="px-3.5 py-1.5 rounded-xl bg-[#1c2130] text-xs text-slate-300 font-semibold"
                 >
@@ -271,9 +285,10 @@ export default function KnowledgeView({ settings, onUpdateSettings }: KnowledgeV
                 </button>
                 <button
                   type="submit"
+                  disabled={savingFaq}
                   className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-xs font-bold"
                 >
-                  Save Document
+                  {savingFaq ? "Saving..." : "Save Document"}
                 </button>
               </div>
             </form>
