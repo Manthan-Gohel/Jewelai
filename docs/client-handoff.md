@@ -14,6 +14,8 @@ Updated November 25, 2026. Local results are in `../TEST_RESULTS.md`; passing mo
 
 The client never supplies a raw Instagram access token or a Gemini API key. A new workspace cannot be created with Instagram alone: first-time email registration preserves the invitation boundary and supplies an independent recovery login.
 
+For exact setup commands, the first/returning Instagram walkthrough, screen usage, CSV examples and troubleshooting, start with `../README.md`. New connections and reconnections start with automatic replies off; review the catalogue/settings and run a controlled test before enabling them.
+
 ## What the operator must supply once
 
 - A server, domain, HTTPS, PostgreSQL, Redis, running backend and Celery worker, backups, and monitoring.
@@ -37,6 +39,7 @@ See `instagram-setup.md` and `deployment.md`. Do not give clients your server `.
 | `frontend/app/`, `frontend/components/`, `frontend/lib/` | Application UI and API client |
 | `frontend/package.json`, `frontend/package-lock.json` | Dependency declarations and reproducible `npm ci` installs |
 | Frontend config/type/style files, `frontend/Dockerfile`, `frontend/.dockerignore`, `frontend/tests/` | Build, typechecking, styling, image, and regression checks |
+| `scripts/`, `frontend/AGENTS.md` | Reproducible local-only browser QA functions/server and Next.js-generated contributor guidance; do not deploy the QA server |
 | `infrastructure/`, `docker-compose.yml`, `.env.example`, `.gitignore`, `README.md`, `docs/`, `TEST_RESULTS.md` | Deployment and operating instructions |
 
 Keep all three migrations, including `003_safe_business_defaults.py`. It changes defaults for future inserts without replacing existing saved settings. Existing demo-like values may have been intentionally entered: review them with the owner instead of automatically deleting or rewriting them. Gold rates must be entered and maintained by the business; this is not a live pricing feed.
@@ -58,10 +61,11 @@ Keep all three migrations, including `003_safe_business_defaults.py`. It changes
 - Review the Git candidate/staged file list and scan for credentials before uploading. `.gitignore` excludes environment files (except the example), databases, key/certificate files, uploads, backups, dependencies and generated artifacts.
 - Publishing source does not deploy it, configure Meta, finalize policies or complete the live acceptance checklist. Do not transfer your operator secrets through GitHub, even in a private repository.
 
-Source was published on November 25, 2026 to `Manthan-Gohel/Jewelai`, branch `main`, using the existing native Git Credential Manager credentials for `Manthan-Gohel`. The initial source-delivery commit is `e393f47`, containing all 114 reviewed source files. The repository's existing initial commit was preserved through a merge; no force-push was used. The earlier integration-based attempt failed with HTTP 403/404, but native Git access resolved the upload blocker. No token from chat was copied into commands, files or Git configuration. Repository visibility and collaborator access still need the owner's review; publishing does not establish that the repository is private. Do not paste another token into chat.
+The initial source delivery was published on November 25, 2026 to `Manthan-Gohel/Jewelai`, branch `main`, using native Git Credential Manager. Commit `e393f47` contained 114 reviewed source files; publication was subsequently recorded in `ce1045a`. This follow-up expands the reviewed inventory to **120 files** with regression tests, reproducible local-only browser QA and Next.js contributor guidance. Use Git history and compare local `HEAD` with the actual remote `refs/heads/main` to identify and verify the follow-up publication. The existing initial commit/history is preserved; no force-push is needed. The earlier integration-based attempt failed with HTTP 403/404, but native Git access resolved the initial upload blocker. No token from chat was copied into commands, files or Git configuration. Repository visibility and collaborator access still need the owner's review; publishing does not establish that the repository is private. Do not paste another token into chat.
 
 ## Known limits to explain honestly
 
+- Final local verification passed **64 backend tests**, **10 frontend tests**, **53 connected workflow checks**, and **28 responsive/recovery checks** against a production-built standalone frontend. The connected run uses synthetic Meta/Gemini transport and temporary data, not live-provider approval or exhaustive every-button coverage. See `../TEST_RESULTS.md` for scope and earlier baselines.
 - No live Meta authorization, delivery, App Review, or deployed HTTPS acceptance has been established by local tests.
 - Token refresh is not scheduled automatically. The connection screen warns when the saved expiry is near; reconnect through Instagram before expiry. Revocation or permission changes may require reconnecting earlier. There are no email/SMS expiry or escalation alerts.
 - Logout clears this browser's cookie; copied bearer tokens remain valid until their configured expiry. There is no server-side session revocation or password-reset email workflow.
