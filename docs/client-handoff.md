@@ -58,7 +58,7 @@ Keep all three migrations, including `003_safe_business_defaults.py`. It changes
 - Review the Git candidate/staged file list and scan for credentials before uploading. `.gitignore` excludes environment files (except the example), databases, key/certificate files, uploads, backups, dependencies and generated artifacts.
 - Publishing source does not deploy it, configure Meta, finalize policies or complete the live acceptance checklist. Do not transfer your operator secrets through GitHub, even in a private repository.
 
-The November 25 publishing attempt was blocked: the authenticated integration could read its account identity but repository creation returned HTTP 403. No remote repository was created and nothing was uploaded. Grant the integration permission to create the private repository, or create an empty private repository in your own GitHub account and authorize the integration for that destination. Do not paste another token into chat.
+Source was published on November 25, 2026 to `Manthan-Gohel/Jewelai`, branch `main`, using the existing native Git Credential Manager credentials for `Manthan-Gohel`. The initial source-delivery commit is `e393f47`, containing all 114 reviewed source files. The repository's existing initial commit was preserved through a merge; no force-push was used. The earlier integration-based attempt failed with HTTP 403/404, but native Git access resolved the upload blocker. No token from chat was copied into commands, files or Git configuration. Repository visibility and collaborator access still need the owner's review; publishing does not establish that the repository is private. Do not paste another token into chat.
 
 ## Known limits to explain honestly
 
