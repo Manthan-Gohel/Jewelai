@@ -1,5 +1,6 @@
 import httpx
 import logging
+from uuid import uuid4
 from typing import Optional, Dict, Any, List
 from app.core.config import settings
 
@@ -35,7 +36,7 @@ class InstagramClient:
                 logger.info(f"[TEST/MOCK] Sending text to {recipient_id}: {text[:60]}...")
                 return {
                     "recipient_id": recipient_id,
-                    "message_id": f"test_mid_{abs(hash(text))}",
+                    "message_id": f"test_mid_{uuid4().hex}",
                     "status": "sent"
                 }
 
@@ -81,7 +82,7 @@ class InstagramClient:
                 logger.info(f"[TEST/MOCK] Sending image to {recipient_id}: {image_url}")
                 return {
                     "recipient_id": recipient_id,
-                    "message_id": f"test_mid_img_{abs(hash(image_url))}",
+                    "message_id": f"test_mid_img_{uuid4().hex}",
                     "status": "sent"
                 }
 
@@ -132,7 +133,7 @@ class InstagramClient:
                 logger.info(f"[TEST/MOCK] Sending {len(elements)} product cards to {recipient_id}")
                 return {
                     "recipient_id": recipient_id,
-                    "message_id": f"test_mid_carousel_{len(elements)}",
+                    "message_id": f"test_mid_carousel_{uuid4().hex}",
                     "status": "sent"
                 }
 
