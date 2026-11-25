@@ -1,0 +1,123 @@
+x-backend-environment: &backend-environment
+  DATABASE_URL: postgresql://${POSTGRES_USER:-jewelai_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-jewelai_db}
+  REDIS_URL: redis://redis:6379/0
+  ENVIRONMENT: production
+  DEBUG: "False"
+  MOCK_INSTAGRAM_API: "False"
+  MOCK_AI_PROVIDER: "False"
+  SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY}
+  REGISTRATION_INVITE_CODE: ${REGISTRATION_INVITE_CODE:?Set REGISTRATION_INVITE_CODE}
+  ENABLE_OPEN_REGISTRATION: "False"
+  ENABLE_DIRECT_TOKEN_CONNECT: "False"
+  INSTAGRAM_APP_ID: ${INSTAGRAM_APP_ID:?Set INSTAGRAM_APP_ID}
+  INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:?Set INSTAGRAM_APP_SECRET}
+  INSTAGRAM_WEBHOOK_VERIFY_TOKEN: ${INSTAGRAM_WEBHOOK_VERIFY_TOKEN:?Set INSTAGRAM_WEBHOOK_VERIFY_TOKEN}
+  INSTAGRAM_REDIRECT_URI: https://${DOMAIN:?Set DOMAIN}/auth/instagram/callback
+  CORS_ORIGINS: '["https://${DOMAIN:?Set DOMAIN}"]'
+  META_API_VERSION: ${META_API_VERSION:-v22.0}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY}
+  GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-gemini-3.8-flash}
+  GEMINI_VISION_MODEL: ${GEMINI_VISION_MODEL:-gemini-3.8-flash}
+  GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}
+  COMMENT_AUTO_DM_DAILY_CAP: ${COMMENT_AUTO_DM_DAILY_CAP:-50}
+  MESSAGING_WINDOW_HOURS: ${MESSAGING_WINDOW_HOURS:-24}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: jewelai-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jewelai_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-jewelai_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jewelai_admin} -d ${POSTGRES_DB:-jewelai_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: jewelai-redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: jewelai-backend
+    restart: always
+    environment: *backend-environment
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: jewelai-worker
+    command: celery -A app.workers.celery_app.celery_app worker --loglevel=info -c 4 -Q instagram_webhooks,celery
+    restart: always
+    environment: *backend-environment
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        BACKEND_URL: http://backend:8000
+    container_name: jewelai-frontend
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: jewelai-proxy
+    restart: always
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
